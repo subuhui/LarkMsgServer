@@ -372,7 +372,3 @@ LarkMsgServer/
 | content + title | 富文本 (post) |
 | 只有 image | 图片 (image) |
 | image + content (+ title) | 图文混合 (post) |
-
-## License
-
-MIT
