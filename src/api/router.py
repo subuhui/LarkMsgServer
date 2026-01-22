@@ -70,50 +70,55 @@ async def send_message(
     receive_id_type: str = Form(default="open_id", description="ID 类型: open_id/user_id/email"),
     title: Optional[str] = Form(None, description="消息标题 (富文本时使用)"),
     content: Optional[str] = Form(None, description="文本内容"),
-    image: Optional[UploadFile] = File(None, description="图片文件"),
+    images: list[UploadFile] = File(default=[], description="图片文件列表（支持多张）"),
     db: Session = Depends(get_db)
 ):
     """
     统一消息发送接口
-    
+
     根据参数自动判断消息类型:
     - 只有 content -> 纯文本
     - content + title -> 富文本
-    - 只有 image -> 纯图片
-    - image + content (+ title) -> 图文混合
+    - 只有单张 image -> 纯图片
+    - 多张 images -> 富文本多图
+    - images + content (+ title) -> 图文混合
     """
     # 参数验证
-    if not content and not image:
-        raise HTTPException(status_code=400, detail="content 或 image 至少提供一个")
-    
+    if not content and not images:
+        raise HTTPException(status_code=400, detail="content 或 images 至少提供一个")
+
     # 获取机器人配置
     bot = db.query(Bot).filter(Bot.name == bot_name, Bot.enabled == True).first()
     if not bot:
         raise HTTPException(status_code=404, detail=f"机器人 '{bot_name}' 不存在或已禁用")
-    
-    # 读取图片数据
-    image_data = None
-    if image:
-        image_data = await image.read()
-    
+
+    # 读取所有图片数据
+    image_data_list = []
+    if images:
+        for img in images:
+            data = await img.read()
+            if data:  # 只添加非空图片
+                image_data_list.append(data)
+
     # 创建飞书客户端并发送消息
     client = LarkClient(app_id=bot.app_id, app_secret=bot.app_secret)
-    
+
     try:
         result = await client.send_message(
             receive_id=receive_id,
             receive_id_type=receive_id_type,
             title=title,
             content=content,
-            image_data=image_data
+            image_data_list=image_data_list if image_data_list else None
         )
-        
+
         return SuccessResponse(
             message="消息发送成功",
             data={
                 "message_id": result.get("data", {}).get("message_id"),
                 "bot_name": bot_name,
-                "receive_id": receive_id
+                "receive_id": receive_id,
+                "images_count": len(image_data_list)
             }
         )
     except Exception as e:

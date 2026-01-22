@@ -107,102 +107,103 @@ class LarkClient:
         receive_id_type: str = "open_id",
         title: Optional[str] = None,
         content: Optional[str] = None,
-        image_data: Optional[bytes] = None
+        image_data_list: Optional[list[bytes]] = None
     ) -> Dict[str, Any]:
         """
         发送消息 (统一接口)
-        
+
         根据参数自动判断消息类型:
         - 只有 content -> text (纯文本)
         - content + title -> post (富文本)
-        - 只有 image_data -> image (纯图片)
-        - image_data + content (+ title) -> post (图文混合)
-        
+        - 只有 image_data_list -> image (单图) 或 post (多图)
+        - image_data_list + content (+ title) -> post (图文混合)
+
         Args:
             receive_id: 接收者 ID
             receive_id_type: ID 类型 (open_id/user_id/email)
             title: 消息标题 (可选)
             content: 文本内容 (可选)
-            image_data: 图片二进制数据 (可选)
-        
+            image_data_list: 图片二进制数据列表 (可选)
+
         Returns:
             飞书 API 响应
         """
-        if not content and not image_data:
-            raise ValueError("content 或 image_data 至少提供一个")
-        
+        if not content and not image_data_list:
+            raise ValueError("content 或 image_data_list 至少提供一个")
+
         # 确定消息类型和构建消息体
-        msg_type, msg_content = await self._build_message(title, content, image_data)
-        
+        msg_type, msg_content = await self._build_message(title, content, image_data_list)
+
         token = await self._get_tenant_access_token()
         url = f"{self.base_url}/im/v1/messages"
-        
+
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json; charset=utf-8"
         }
-        
+
         params = {
             "receive_id_type": receive_id_type
         }
-        
+
         payload = {
             "receive_id": receive_id,
             "msg_type": msg_type,
             "content": msg_content
         }
-        
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, headers=headers, params=params, json=payload)
             resp.raise_for_status()
             result = resp.json()
-        
+
         if result.get("code") != 0:
             raise Exception(f"发送消息失败: {result.get('msg')}")
-        
+
         return result
     
     async def _build_message(
         self,
         title: Optional[str],
         content: Optional[str],
-        image_data: Optional[bytes]
+        image_data_list: Optional[list[bytes]]
     ) -> Tuple[str, str]:
         """
         构建消息体
-        
+
         Returns:
             (msg_type, content_json_str)
         """
         import json
-        
-        # 情况1: 只有图片 -> image 类型
-        if image_data and not content:
-            image_key = await self.upload_image(image_data)
+
+        # 情况1: 只有单张图片且无标题无内容 -> image 类型
+        if image_data_list and len(image_data_list) == 1 and not content and not title:
+            image_key = await self.upload_image(image_data_list[0])
             return "image", json.dumps({"image_key": image_key})
-        
-        # 情况2: 只有文本,无标题 -> text 类型
-        if content and not title and not image_data:
+
+        # 情况2: 只有文本,无标题,无图片 -> text 类型
+        if content and not title and not image_data_list:
             return "text", json.dumps({"text": content})
-        
-        # 情况3: 有标题 或 有图文混合 -> post (富文本) 类型
+
+        # 情况3: 有标题 或 有图文混合 或 多张图片 -> post (富文本) 类型
         # 构建富文本内容
         post_content = []
-        
+
         # 添加文本
         if content:
             post_content.append([{"tag": "text", "text": content}])
-        
-        # 添加图片
-        if image_data:
-            image_key = await self.upload_image(image_data)
-            post_content.append([{"tag": "img", "image_key": image_key}])
-        
+
+        # 添加图片 (支持多张)
+        if image_data_list:
+            for image_data in image_data_list:
+                image_key = await self.upload_image(image_data)
+                post_content.append([{"tag": "img", "image_key": image_key}])
+
         post_body = {
             "zh_cn": {
                 "title": title or "",
                 "content": post_content
             }
         }
-        
+
         return "post", json.dumps(post_body)

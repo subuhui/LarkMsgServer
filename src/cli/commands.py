@@ -126,61 +126,70 @@ def send(
     id_type: str = typer.Option("open_id", "--id-type", help="ID 类型: open_id/user_id/email"),
     title: Optional[str] = typer.Option(None, "--title", help="消息标题"),
     content: Optional[str] = typer.Option(None, "--content", "-c", help="文本内容"),
-    image: Optional[Path] = typer.Option(None, "--image", "-i", help="图片文件路径")
+    images: Optional[list[str]] = typer.Option(None, "--image", "-i", help="图片文件路径（可多次指定）")
 ):
     """
     发送消息
-    
+
     示例:
-    
+
         # 发送纯文本
         python -m src.main send --bot mybot --to ou_xxx --content "Hello"
-        
-        # 发送图片
+
+        # 发送单张图片
         python -m src.main send --bot mybot --to ou_xxx --image ./img.png
-        
+
+        # 发送多张图片
+        python -m src.main send --bot mybot --to ou_xxx --image ./img1.png --image ./img2.png --image ./img3.png
+
         # 发送图文混合
         python -m src.main send --bot mybot --to ou_xxx --title "通知" --content "详情" --image ./img.png
     """
-    if not content and not image:
+    if not content and not images:
         typer.echo("❌ 请提供 --content 或 --image", err=True)
         raise typer.Exit(1)
-    
+
     init_db()
     db = SessionLocal()
-    
+
     try:
         # 获取机器人配置
         bot_obj = db.query(Bot).filter(Bot.name == bot, Bot.enabled == True).first()
         if not bot_obj:
             typer.echo(f"❌ 机器人 '{bot}' 不存在或已禁用", err=True)
             raise typer.Exit(1)
-        
-        # 读取图片
-        image_data = None
-        if image:
-            if not image.exists():
-                typer.echo(f"❌ 图片文件不存在: {image}", err=True)
-                raise typer.Exit(1)
-            image_data = image.read_bytes()
-        
+
+        # 读取所有图片
+        image_data_list = None
+        if images:
+            image_data_list = []
+            for img_path_str in images:
+                img_path = Path(img_path_str)
+                if not img_path.exists():
+                    typer.echo(f"❌ 图片文件不存在: {img_path}", err=True)
+                    raise typer.Exit(1)
+                image_data_list.append(img_path.read_bytes())
+
+            if image_data_list:
+                typer.echo(f"📷 已加载 {len(image_data_list)} 张图片")
+
         # 发送消息
         client = LarkClient(app_id=bot_obj.app_id, app_secret=bot_obj.app_secret)
-        
+
         async def do_send():
             return await client.send_message(
                 receive_id=to,
                 receive_id_type=id_type,
                 title=title,
                 content=content,
-                image_data=image_data
+                image_data_list=image_data_list
             )
-        
+
         result = asyncio.run(do_send())
-        
+
         msg_id = result.get("data", {}).get("message_id", "unknown")
         typer.echo(f"✅ 消息发送成功 (message_id: {msg_id})")
-        
+
     except Exception as e:
         typer.echo(f"❌ 发送失败: {e}", err=True)
         raise typer.Exit(1)

@@ -87,9 +87,9 @@ python -m src.main serve
 | receive_id_type | string | 否 | ID 类型: open_id(默认)/user_id/email |
 | title | string | 否 | 消息标题 (富文本时使用) |
 | content | string | 否 | 文本内容 |
-| image | file | 否 | 图片文件 |
+| images | file[] | 否 | 图片文件列表（支持多张） |
 
-> content 和 image 至少提供一个
+> content 和 images 至少提供一个
 
 **示例:**
 
@@ -100,11 +100,19 @@ curl -X POST http://localhost:234/api/send \
   -F "receive_id=ou_xxxxxxxx" \
   -F "content=Hello World"
 
-# 发送图片
+# 发送单张图片
 curl -X POST http://localhost:234/api/send \
   -F "bot_name=mybot" \
   -F "receive_id=ou_xxxxxxxx" \
-  -F "image=@./photo.png"
+  -F "images=@./photo.png"
+
+# 发送多张图片
+curl -X POST http://localhost:234/api/send \
+  -F "bot_name=mybot" \
+  -F "receive_id=ou_xxxxxxxx" \
+  -F "images=@./photo1.png" \
+  -F "images=@./photo2.png" \
+  -F "images=@./photo3.png"
 
 # 发送图文混合 (富文本)
 curl -X POST http://localhost:234/api/send \
@@ -112,7 +120,8 @@ curl -X POST http://localhost:234/api/send \
   -F "receive_id=ou_xxxxxxxx" \
   -F "title=通知标题" \
   -F "content=这是通知内容" \
-  -F "image=@./photo.png"
+  -F "images=@./photo1.png" \
+  -F "images=@./photo2.png"
 ```
 
 ### 机器人管理
@@ -170,11 +179,19 @@ python -m src.main send \
   --to ou_xxxxxxxx \
   --content "Hello World"
 
-# 发送图片
+# 发送单张图片
 python -m src.main send \
   --bot mybot \
   --to ou_xxxxxxxx \
   --image ./photo.png
+
+# 发送多张图片
+python -m src.main send \
+  --bot mybot \
+  --to ou_xxxxxxxx \
+  --image ./photo1.png \
+  --image ./photo2.png \
+  --image ./photo3.png
 
 # 发送图文混合
 python -m src.main send \
@@ -182,7 +199,8 @@ python -m src.main send \
   --to ou_xxxxxxxx \
   --title "通知" \
   --content "详情内容" \
-  --image ./photo.png
+  --image ./photo1.png \
+  --image ./photo2.png
 
 # 使用邮箱作为接收者
 python -m src.main send \
@@ -370,5 +388,6 @@ LarkMsgServer/
 |------|----------|
 | 只有 content | 纯文本 (text) |
 | content + title | 富文本 (post) |
-| 只有 image | 图片 (image) |
-| image + content (+ title) | 图文混合 (post) |
+| 只有单张图片 | 图片 (image) |
+| 多张图片 | 富文本多图 (post) |
+| 图片 + content (+ title) | 图文混合 (post) |
